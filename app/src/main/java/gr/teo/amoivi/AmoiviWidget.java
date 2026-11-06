@@ -11,6 +11,7 @@ import android.os.SystemClock;
 import android.view.View;
 import android.widget.RemoteViews;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.Calendar;
@@ -57,6 +58,7 @@ public class AmoiviWidget extends AppWidgetProvider {
     private static void render(Context ctx, AppWidgetManager mgr, int[] ids) {
         long start = 0, end = 0;
         double rate = 8, exp = 0;
+        double mGross = 0, mExp = 0; long mMs = 0; int mCount = 0;
         try {
             String raw = ctx.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
                     .getString(MainActivity.KEY_STATE, "");
@@ -68,6 +70,24 @@ public class AmoiviWidget extends AppWidgetProvider {
                 exp = o.optDouble("exp", 0);
                 if (Double.isNaN(rate)) rate = 8;
                 if (Double.isNaN(exp)) exp = 0;
+                JSONArray h = o.optJSONArray("hist");
+                if (h != null) {
+                    Calendar nowC = Calendar.getInstance();
+                    Calendar c = Calendar.getInstance();
+                    for (int i = 0; i < h.length(); i++) {
+                        JSONObject r = h.optJSONObject(i);
+                        if (r == null) continue;
+                        long rs = r.optLong("start", 0), re = r.optLong("end", 0);
+                        c.setTimeInMillis(rs);
+                        if (c.get(Calendar.YEAR) != nowC.get(Calendar.YEAR)
+                                || c.get(Calendar.MONTH) != nowC.get(Calendar.MONTH)) continue;
+                        double g = r.optDouble("earned", 0), e = r.optDouble("exp", 0);
+                        if (!Double.isNaN(g)) mGross += g;
+                        if (!Double.isNaN(e)) mExp += e;
+                        mMs += Math.max(0, re - rs);
+                        mCount++;
+                    }
+                }
             }
         } catch (Exception ignored) { }
 
@@ -82,15 +102,22 @@ public class AmoiviWidget extends AppWidgetProvider {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         v.setOnClickPendingIntent(R.id.root, pi);
 
-        if (start == 0) {
-            v.setTextViewText(R.id.state, "Ανενεργό");
+        if (start == 0 || end != 0) {
+            // Καμία ενεργή βάρδια: σύνολο τρέχοντος μήνα
+            v.setTextViewText(R.id.state, "Σύνολο μήνα · " + mCount + (mCount == 1 ? " βάρδια" : " βάρδιες"));
             v.setTextColor(R.id.state, 0xFF8B919E);
-            v.setTextViewText(R.id.amount, "0,00 €");
-            v.setChronometer(R.id.elapsed, SystemClock.elapsedRealtime(), null, false);
-            v.setTextViewText(R.id.exp, "Πάτα για έναρξη");
-            v.setViewVisibility(R.id.net, View.GONE);
+            v.setTextViewText(R.id.amount, money(mGross) + " €");
+            v.setViewVisibility(R.id.elapsed, View.GONE);
+            v.setViewVisibility(R.id.hours, View.VISIBLE);
+            long mins = mMs / 60000;
+            v.setTextViewText(R.id.hours, String.format(GR, "%d:%02d ώρες", mins / 60, mins % 60));
+            v.setTextViewText(R.id.exp, "Έξοδα −" + money(mExp) + " €");
+            v.setViewVisibility(R.id.net, View.VISIBLE);
+            v.setTextViewText(R.id.net, "Καθαρά " + money(mGross - mExp) + " €");
             cancelTick(ctx);
         } else {
+            v.setViewVisibility(R.id.elapsed, View.VISIBLE);
+            v.setViewVisibility(R.id.hours, View.GONE);
             long stop = running ? now : end;
             long ms = Math.max(0, stop - start);
             double earned = ms / 3600000.0 * rate;

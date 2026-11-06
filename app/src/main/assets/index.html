@@ -21,6 +21,9 @@
   .amount small{font-size:32px;color:var(--mut);font-weight:600;margin-left:4px}
   .elapsed{font-size:22px;font-variant-numeric:tabular-nums;margin-top:8px}
   .sub{font-size:13px;color:var(--mut);margin-top:6px}
+  .seg{display:inline-flex;background:#0f1115;border:1px solid var(--line);border-radius:99px;padding:3px;margin-bottom:12px}
+  .seg button{border:0;background:transparent;color:var(--mut);font:inherit;font-size:13px;font-weight:600;padding:7px 14px;border-radius:99px}
+  .seg button.on{background:var(--acc);color:#06210f}
   .net{display:flex;justify-content:center;gap:16px;margin-top:12px;font-size:14px;font-variant-numeric:tabular-nums}
   .net .e{color:var(--red)} .net .n{color:var(--acc);font-weight:700}
   .row{display:flex;gap:10px;margin-top:14px}
@@ -54,10 +57,11 @@
 <h1>⏱ Αμοιβή Live</h1>
 
 <div class="widget">
-  <div id="state" class="state">Ανενεργό</div>
+  <div class="seg" id="seg"><button data-p="m" class="on">Σύνολο μήνα</button><button data-p="a">Από πάντα</button></div>
+  <div id="state" class="state on" style="display:none">● Σε βάρδια</div>
   <div class="amount"><span id="amount">0,00</span><small>€</small></div>
   <div class="elapsed" id="elapsed">0:00:00</div>
-  <div class="sub" id="sub">Πάτα «Έναρξη» και διάλεξε ώρα</div>
+  <div class="sub" id="sub" style="display:none"></div>
   <div class="net"><span class="e">Έξοδα −<span id="expV">0,00</span> €</span><span class="n">Καθαρά <span id="netV">0,00</span> €</span></div>
 </div>
 
@@ -78,7 +82,7 @@
       <input class="num" type="number" id="rate" inputmode="decimal" step="0.5" min="0" value="8">
     </div>
   </div>
-  <div class="hint">Αν η ώρα έναρξης που διαλέγεις είναι μετά την τωρινή, μετράει ως χθεσινή (νυχτερινή βάρδια). Τα έξοδα αποθηκεύονται μαζί με τη βάρδια όταν πατήσεις «Τέλος».</div>
+  <div class="hint">Αν η ώρα έναρξης που διαλέγεις είναι μετά την τωρινή, μετράει ως χθεσινή (νυχτερινή βάρδια). Τα έξοδα μένουν όπως τα έγραψες και αποθηκεύονται μαζί με τη βάρδια όταν πατήσεις «Τέλος».</div>
 </div>
 
 <div class="card">
@@ -98,7 +102,9 @@
       var raw=B?B.load():localStorage.getItem(KEY);
       if(!raw&&!B)raw=localStorage.getItem('amoivi-live-v1');
       var s=raw?JSON.parse(raw):null;
-      if(s){st=Object.assign(st,s);if(!Array.isArray(st.hist))st.hist=[];st.exp=+st.exp||0;}
+      if(s){st=Object.assign(st,s);if(!Array.isArray(st.hist))st.hist=[];st.exp=+st.exp||0;
+        if(st.end){st.start=null;st.end=null;} // παλιά μορφή: ολοκληρωμένη βάρδια = καμία ενεργή
+      }
     }catch(e){}
   }
   function save(){var j=JSON.stringify(st);try{if(B)B.save(j);else localStorage.setItem(KEY,j);}catch(e){}}
@@ -109,45 +115,61 @@
   function num(v){var r=parseFloat(String(v).replace(',','.'));return isNaN(r)||r<0?0:r}
   var msgT;function msg(t){$('msg').textContent=t;clearTimeout(msgT);msgT=setTimeout(function(){$('msg').textContent=''},4000)}
 
+  var period='m'; // m = τρέχων μήνας, a = από πάντα
+  function totals(p){
+    var n=new Date(),y=n.getFullYear(),mo=n.getMonth(),t={g:0,e:0,ms:0,c:0};
+    st.hist.forEach(function(r){
+      var d=new Date(r.start);
+      if(p==='m'&&(d.getFullYear()!==y||d.getMonth()!==mo))return;
+      t.g+=r.earned;t.e+=(r.exp||0);t.ms+=(r.end-r.start);t.c++;
+    });
+    return t;
+  }
+  function hm(ms){var m=Math.floor(Math.max(0,ms)/60000);return Math.floor(m/60)+':'+String(m%60).padStart(2,'0')}
+
   function render(){
-    var now=Date.now(),running=st.start&&!st.end;
+    var now=Date.now(),running=!!st.start;
     $('endWrap').style.display=running?'':'none';
     $('cancelRow').style.display=running?'':'none';
-    $('expV').textContent=money(st.exp);
-    if(!st.start){
-      $('state').className='state';$('state').textContent='Ανενεργό';
-      $('amount').textContent='0,00';$('elapsed').textContent='0:00:00';
-      $('sub').textContent='Πάτα «Έναρξη» και διάλεξε ώρα';
-      $('netV').textContent=money(-st.exp);
+    $('seg').style.display=running?'none':'';
+    $('state').style.display=running?'':'none';
+    $('sub').style.display=running?'':'none';
+    if(!running){
+      var t=totals(period);
+      $('amount').textContent=money(t.g);
+      $('elapsed').textContent=hm(t.ms)+' ώρες · '+t.c+(t.c===1?' βάρδια':' βάρδιες');
+      $('expV').textContent=money(t.e);
+      $('netV').textContent=money(t.g-t.e);
       document.title='Αμοιβή Live';return;
     }
-    var ms=(st.end||now)-st.start,earned=ms/3600000*st.rate;
+    var ms=now-st.start,earned=ms/3600000*st.rate;
     $('amount').textContent=money(earned);
     $('elapsed').textContent=dur(ms);
+    $('expV').textContent=money(st.exp);
     $('netV').textContent=money(earned-st.exp);
-    if(st.end){
-      $('state').className='state stop';$('state').textContent='Ολοκληρώθηκε';
-      $('sub').textContent=hhmm(st.start)+' → '+hhmm(st.end)+' · '+money(st.rate)+' €/ώρα';
-    }else{
-      $('state').className='state on';$('state').textContent='● Σε βάρδια';
-      $('sub').textContent='Από '+hhmm(st.start)+' · '+money(st.rate)+' €/ώρα';
-    }
+    $('sub').textContent='Από '+hhmm(st.start)+' · '+money(st.rate)+' €/ώρα';
     document.title=money(earned)+' € · Αμοιβή Live';
   }
+  $('seg').addEventListener('click',function(e){
+    var b=e.target.closest('button[data-p]');if(!b)return;
+    period=b.dataset.p;
+    [].forEach.call(this.querySelectorAll('button'),function(x){x.classList.toggle('on',x===b)});
+    render();
+  });
 
   var askIdx=-1;
   function renderHist(){
     var h=$('hist');
     if(!st.hist.length){h.innerHTML='<div class="it"><span style="color:var(--mut)">Καμία ακόμα</span></div>';$('tot').innerHTML='';return;}
-    var sum=0;
-    h.innerHTML=st.hist.map(function(r,i){
-      var net=r.earned-(r.exp||0);sum+=net;
+    var sum=0;st.hist.forEach(function(r){sum+=r.earned});
+    h.innerHTML=st.hist.slice(0,50).map(function(r,i){
+      var net=r.earned-(r.exp||0);
       if(i===askIdx)return '<div class="ask"><span>Διαγραφή βάρδιας;</span><div><button data-no>Όχι</button><button class="y" data-yes="'+i+'">Ναι</button></div></div>';
       var d=new Date(r.start);
       return '<div class="it" data-i="'+i+'"><span>'+d.getDate()+'/'+(d.getMonth()+1)+' · '+hhmm(r.start)+'–'+hhmm(r.end)+'</span>'+
         '<span class="r">'+money(net)+' €<div class="g">'+money(r.earned)+(r.exp?' − '+money(r.exp):'')+'</div></span></div>';
     }).join('');
-    $('tot').innerHTML='<span>'+st.hist.length+' βάρδιες</span><span>Σύνολο καθαρά <b>'+money(sum)+' €</b></span>';
+    $('tot').innerHTML='<span>'+st.hist.length+' βάρδιες</span><span>Σύνολο <b>'+money(sum)+' €</b></span>';
   }
 
   // Παρατεταμένο πάτημα για διαγραφή
@@ -179,8 +201,7 @@
     if(!this.value)return;
     var d=pickedTs(this.value);
     if(d.getTime()>Date.now()+60000)d.setDate(d.getDate()-1);
-    if(st.start&&st.end){st.exp=0;$('exp').value='';} // νέα βάρδια μετά από ολοκληρωμένη
-    st.start=d.getTime();st.end=null;askIdx=-1;save();render();
+    st.start=d.getTime();st.end=null;askIdx=-1;save();render(); // τα έξοδα ΔΕΝ πειράζονται
     msg('Έναρξη '+hhmm(st.start));
   });
   $('pickEnd').addEventListener('change',function(){
@@ -188,9 +209,12 @@
     var d=pickedTs(this.value);
     if(d.getTime()>Date.now()+60000)d.setDate(d.getDate()-1);
     if(d.getTime()<=st.start){msg('Η λήξη πρέπει να είναι μετά την έναρξη ('+hhmm(st.start)+')');return;}
-    st.end=d.getTime();
-    st.hist.unshift({start:st.start,end:st.end,rate:st.rate,earned:(st.end-st.start)/3600000*st.rate,exp:st.exp});
-    st.hist=st.hist.slice(0,60);save();render();renderHist();
+    var end=d.getTime();
+    st.hist.unshift({start:st.start,end:end,rate:st.rate,earned:(end-st.start)/3600000*st.rate,exp:st.exp});
+    st.hist.sort(function(a,b){return b.start-a.start});
+    // η βάρδια έκλεισε: τα έξοδά της πήγαν μαζί της, το κουτάκι αδειάζει για την επόμενη
+    st.start=null;st.end=null;st.exp=0;$('exp').value='';
+    save();render();renderHist();
     msg('Η βάρδια αποθηκεύτηκε');
   });
   $('btnCancel').onclick=function(){
