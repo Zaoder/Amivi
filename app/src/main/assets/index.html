@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Αμοιβή Live</title>
+<style>
+  :root{--bg:#0f1115;--card:#181b22;--line:#262a33;--txt:#eef0f4;--mut:#8b919e;--acc:#3ddc97;--warn:#ffb547;--red:#ff6b6b}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  body{padding:calc(16px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));max-width:480px;margin:0 auto;-webkit-user-select:none;user-select:none}
+  h1{font-size:15px;font-weight:600;color:var(--mut);margin:4px 0 14px;letter-spacing:.3px}
+  .widget{background:linear-gradient(160deg,#1b2a24,#181b22 60%);border:1px solid var(--line);border-radius:24px;padding:22px 20px;text-align:center}
+  .state{display:inline-block;font-size:12px;padding:4px 10px;border-radius:99px;background:#262a33;color:var(--mut);margin-bottom:10px}
+  .state.on{background:rgba(61,220,151,.15);color:var(--acc)}
+  .state.stop{background:rgba(255,181,71,.15);color:var(--warn)}
+  .amount{font-size:64px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.05;letter-spacing:-1px}
+  .amount small{font-size:32px;color:var(--mut);font-weight:600;margin-left:4px}
+  .elapsed{font-size:22px;font-variant-numeric:tabular-nums;margin-top:8px}
+  .sub{font-size:13px;color:var(--mut);margin-top:6px}
+  .net{display:flex;justify-content:center;gap:16px;margin-top:12px;font-size:14px;font-variant-numeric:tabular-nums}
+  .net .e{color:var(--red)} .net .n{color:var(--acc);font-weight:700}
+  .row{display:flex;gap:10px;margin-top:14px}
+  .btn{position:relative;flex:1;border-radius:16px;padding:16px 10px;font-size:16px;font-weight:600;color:var(--txt);background:var(--card);border:1px solid var(--line);text-align:center;overflow:hidden}
+  .btn:active{transform:scale(.98)}
+  .primary{background:var(--acc);color:#06210f;border-color:var(--acc)}
+  .btn input[type=time]{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;padding:0;margin:0;font-size:16px}
+  button.btn{font-family:inherit}
+  .danger{color:var(--red)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 16px;margin-top:14px}
+  label{display:block;font-size:13px;color:var(--mut);margin-bottom:6px}
+  .two{display:flex;gap:10px}
+  .two>div{flex:1;min-width:0}
+  .num{width:100%;background:#0f1115;color:var(--txt);border:1px solid var(--line);border-radius:12px;padding:12px;font-size:18px;font-variant-numeric:tabular-nums;-webkit-user-select:text;user-select:text}
+  .hint{font-size:12px;color:var(--mut);margin-top:8px;line-height:1.4}
+  .msg{font-size:13px;color:var(--warn);text-align:center;min-height:18px;margin-top:8px}
+  .hist .it{display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:10px 4px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;border-radius:8px;transition:background .15s}
+  .hist .it:last-child{border-bottom:0}
+  .hist .it.press{background:rgba(255,107,107,.12)}
+  .hist .it .r{text-align:right}
+  .hist .it .g{font-size:11px;color:var(--mut)}
+  .hist .ask{display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid var(--line);background:rgba(255,107,107,.1);border-radius:8px}
+  .hist .ask span{color:var(--red);font-size:14px}
+  .hist .ask button{border:1px solid var(--line);background:var(--card);color:var(--txt);border-radius:10px;padding:8px 14px;font-size:14px;margin-left:6px}
+  .hist .ask button.y{background:var(--red);border-color:var(--red);color:#2a0606}
+  .tot{display:flex;justify-content:space-between;font-size:13px;color:var(--mut);margin-top:10px}
+  .tot b{color:var(--txt)}
+</style>
+</head>
+<body>
+<h1>⏱ Αμοιβή Live</h1>
+
+<div class="widget">
+  <div id="state" class="state">Ανενεργό</div>
+  <div class="amount"><span id="amount">0,00</span><small>€</small></div>
+  <div class="elapsed" id="elapsed">0:00:00</div>
+  <div class="sub" id="sub">Πάτα «Έναρξη» και διάλεξε ώρα</div>
+  <div class="net"><span class="e">Έξοδα −<span id="expV">0,00</span> €</span><span class="n">Καθαρά <span id="netV">0,00</span> €</span></div>
+</div>
+
+<div class="row">
+  <div class="btn primary">▶ Έναρξη<input type="time" id="pickStart" aria-label="Ώρα έναρξης"></div>
+  <div class="btn" id="endWrap" style="display:none">■ Τέλος<input type="time" id="pickEnd" aria-label="Ώρα λήξης"></div>
+</div>
+<div class="msg" id="msg"></div>
+
+<div class="card">
+  <div class="two">
+    <div>
+      <label for="exp">Έξοδα βάρδιας (€)</label>
+      <input class="num" type="number" id="exp" inputmode="decimal" step="0.5" min="0" placeholder="0">
+    </div>
+    <div>
+      <label for="rate">Αμοιβή / ώρα (€)</label>
+      <input class="num" type="number" id="rate" inputmode="decimal" step="0.5" min="0" value="8">
+    </div>
+  </div>
+  <div class="hint">Αν η ώρα έναρξης που διαλέγεις είναι μετά την τωρινή, μετράει ως χθεσινή (νυχτερινή βάρδια). Τα έξοδα αποθηκεύονται μαζί με τη βάρδια όταν πατήσεις «Τέλος».</div>
+</div>
+
+<div class="card">
+  <label>Βάρδιες <span style="font-size:11px">(παρατεταμένο πάτημα για διαγραφή)</span></label>
+  <div class="hist" id="hist"></div>
+  <div class="tot" id="tot"></div>
+  <div class="row" id="cancelRow" style="display:none"><button class="btn danger" id="btnCancel">Ακύρωση τρέχουσας βάρδιας</button></div>
+</div>
+
+<script>
+(function(){
+  var KEY='amoivi-live-v2';
+  var B=window.AmoiviBridge||null; // υπάρχει μόνο μέσα στην εφαρμογή Android
+  var st={start:null,end:null,rate:8,exp:0,hist:[]};
+  function load(){
+    try{
+      var raw=B?B.load():localStorage.getItem(KEY);
+      if(!raw&&!B)raw=localStorage.getItem('amoivi-live-v1');
+      var s=raw?JSON.parse(raw):null;
+      if(s){st=Object.assign(st,s);if(!Array.isArray(st.hist))st.hist=[];st.exp=+st.exp||0;}
+    }catch(e){}
+  }
+  function save(){var j=JSON.stringify(st);try{if(B)B.save(j);else localStorage.setItem(KEY,j);}catch(e){}}
+  var $=function(id){return document.getElementById(id)};
+  function money(v){return (Math.round(v*100)/100).toLocaleString('el-GR',{minimumFractionDigits:2,maximumFractionDigits:2})}
+  function hhmm(ts){var d=new Date(ts);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
+  function dur(ms){var s=Math.max(0,Math.floor(ms/1000));var h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0')}
+  function num(v){var r=parseFloat(String(v).replace(',','.'));return isNaN(r)||r<0?0:r}
+  var msgT;function msg(t){$('msg').textContent=t;clearTimeout(msgT);msgT=setTimeout(function(){$('msg').textContent=''},4000)}
+
+  function render(){
+    var now=Date.now(),running=st.start&&!st.end;
+    $('endWrap').style.display=running?'':'none';
+    $('cancelRow').style.display=running?'':'none';
+    $('expV').textContent=money(st.exp);
+    if(!st.start){
+      $('state').className='state';$('state').textContent='Ανενεργό';
+      $('amount').textContent='0,00';$('elapsed').textContent='0:00:00';
+      $('sub').textContent='Πάτα «Έναρξη» και διάλεξε ώρα';
+      $('netV').textContent=money(-st.exp);
+      document.title='Αμοιβή Live';return;
+    }
+    var ms=(st.end||now)-st.start,earned=ms/3600000*st.rate;
+    $('amount').textContent=money(earned);
+    $('elapsed').textContent=dur(ms);
+    $('netV').textContent=money(earned-st.exp);
+    if(st.end){
+      $('state').className='state stop';$('state').textContent='Ολοκληρώθηκε';
+      $('sub').textContent=hhmm(st.start)+' → '+hhmm(st.end)+' · '+money(st.rate)+' €/ώρα';
+    }else{
+      $('state').className='state on';$('state').textContent='● Σε βάρδια';
+      $('sub').textContent='Από '+hhmm(st.start)+' · '+money(st.rate)+' €/ώρα';
+    }
+    document.title=money(earned)+' € · Αμοιβή Live';
+  }
+
+  var askIdx=-1;
+  function renderHist(){
+    var h=$('hist');
+    if(!st.hist.length){h.innerHTML='<div class="it"><span style="color:var(--mut)">Καμία ακόμα</span></div>';$('tot').innerHTML='';return;}
+    var sum=0;
+    h.innerHTML=st.hist.map(function(r,i){
+      var net=r.earned-(r.exp||0);sum+=net;
+      if(i===askIdx)return '<div class="ask"><span>Διαγραφή βάρδιας;</span><div><button data-no>Όχι</button><button class="y" data-yes="'+i+'">Ναι</button></div></div>';
+      var d=new Date(r.start);
+      return '<div class="it" data-i="'+i+'"><span>'+d.getDate()+'/'+(d.getMonth()+1)+' · '+hhmm(r.start)+'–'+hhmm(r.end)+'</span>'+
+        '<span class="r">'+money(net)+' €<div class="g">'+money(r.earned)+(r.exp?' − '+money(r.exp):'')+'</div></span></div>';
+    }).join('');
+    $('tot').innerHTML='<span>'+st.hist.length+' βάρδιες</span><span>Σύνολο καθαρά <b>'+money(sum)+' €</b></span>';
+  }
+
+  // Παρατεταμένο πάτημα για διαγραφή
+  (function(){
+    var t=null,el=null,sx=0,sy=0;
+    function clear(){if(t){clearTimeout(t);t=null}if(el){el.classList.remove('press');el=null}}
+    $('hist').addEventListener('pointerdown',function(e){
+      var it=e.target.closest('.it[data-i]');if(!it)return;
+      el=it;sx=e.clientX;sy=e.clientY;it.classList.add('press');
+      t=setTimeout(function(){askIdx=+it.dataset.i;clear();try{if(B&&B.vibrate)B.vibrate(30);else if(navigator.vibrate)navigator.vibrate(30)}catch(x){}renderHist();},600);
+    });
+    $('hist').addEventListener('pointermove',function(e){if(t&&(Math.abs(e.clientX-sx)>10||Math.abs(e.clientY-sy)>10))clear();});
+    ['pointerup','pointercancel','pointerleave'].forEach(function(n){$('hist').addEventListener(n,clear)});
+    $('hist').addEventListener('contextmenu',function(e){e.preventDefault()});
+    $('hist').addEventListener('click',function(e){
+      if(e.target.hasAttribute('data-no')){askIdx=-1;renderHist();}
+      else if(e.target.hasAttribute('data-yes')){st.hist.splice(+e.target.dataset.yes,1);askIdx=-1;save();renderHist();}
+    });
+  })();
+
+  function pickedTs(v){var p=v.split(':');var d=new Date();d.setHours(+p[0],+p[1],0,0);return d}
+  function prep(inp){inp.value='';}
+  ['pickStart','pickEnd'].forEach(function(id){
+    var inp=$(id);
+    inp.addEventListener('pointerdown',function(){prep(inp)});
+    inp.addEventListener('click',function(){try{if(inp.showPicker)inp.showPicker()}catch(e){}});
+  });
+  $('pickStart').addEventListener('change',function(){
+    if(!this.value)return;
+    var d=pickedTs(this.value);
+    if(d.getTime()>Date.now()+60000)d.setDate(d.getDate()-1);
+    if(st.start&&st.end){st.exp=0;$('exp').value='';} // νέα βάρδια μετά από ολοκληρωμένη
+    st.start=d.getTime();st.end=null;askIdx=-1;save();render();
+    msg('Έναρξη '+hhmm(st.start));
+  });
+  $('pickEnd').addEventListener('change',function(){
+    if(!this.value||!st.start||st.end)return;
+    var d=pickedTs(this.value);
+    if(d.getTime()>Date.now()+60000)d.setDate(d.getDate()-1);
+    if(d.getTime()<=st.start){msg('Η λήξη πρέπει να είναι μετά την έναρξη ('+hhmm(st.start)+')');return;}
+    st.end=d.getTime();
+    st.hist.unshift({start:st.start,end:st.end,rate:st.rate,earned:(st.end-st.start)/3600000*st.rate,exp:st.exp});
+    st.hist=st.hist.slice(0,60);save();render();renderHist();
+    msg('Η βάρδια αποθηκεύτηκε');
+  });
+  $('btnCancel').onclick=function(){
+    var b=this;
+    if(b.dataset.armed){st.start=null;st.end=null;save();render();b.textContent='Ακύρωση τρέχουσας βάρδιας';delete b.dataset.armed;return;}
+    b.dataset.armed='1';b.textContent='Πάτα ξανά για επιβεβαίωση';
+    setTimeout(function(){if(b.dataset.armed){delete b.dataset.armed;b.textContent='Ακύρωση τρέχουσας βάρδιας';}},3000);
+  };
+  $('rate').addEventListener('input',function(){st.rate=num(this.value);save();render();});
+  $('exp').addEventListener('input',function(){st.exp=num(this.value);save();render();});
+
+  load();
+  $('rate').value=st.rate;
+  $('exp').value=st.exp?st.exp:'';
+  render();renderHist();setInterval(render,1000);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden){if(B){load();renderHist();}render();}});
+})();
+</script>
+</body>
+</html>
